@@ -50,6 +50,11 @@ package CardStash {
   use Moose;
   use List::Util;
 
+  # shortcut constructor for an empty stash
+  sub new_empty {
+    CardStash->new(cards => [ ]);
+  }
+
   has cards => (
     is => 'rw',
     isa => 'ArrayRef[Card]',
@@ -68,6 +73,76 @@ package CardStash {
     push @pick, shift $self->cards->@* for (1..$num_of_cards);
     CardStash->new(cards => \@pick);
   }
+
+  no Moose;
+  __PACKAGE__->meta->make_immutable;
+}
+package RemigioPlayer {
+  use Moose;
+
+  has name => (is => 'ro', isa => 'Str', required => 1);
+  has hand => (is => 'ro', isa => 'CardStash', required => 1);
+
+  no Moose;
+  __PACKAGE__->meta->make_immutable;
+}
+package Remigio {
+  use Moose;
+  use feature 'postderef';
+
+  around BUILDARGS => sub ($orig, $self, %args) {
+    my $deck = FrenchDeck->new->shuffle;
+    my @players = map { RemigioPlayer->new(name => $_, hand => $deck->take(10)) } $args{player_names}->@*;
+    my $visible_pile = $deck->take(1);
+
+    return {
+      player_names => $args{player_names},
+      players => \@players,
+      invisible_pile => $deck,
+      visible_pile => $visible_pile,
+    };
+  };
+
+  has turn => (
+    is => 'ro',
+    isa => 'Int',
+    default => 1,
+    traits => [ 'Counter' ],
+    handles => {
+      next_turn => 'inc',
+    }
+  );
+
+  sub current_player ($self) {
+    $self->player(($self->turn - 1) % $self->player_count);
+  }
+
+  has player_names => (
+    is => 'ro',
+    isa => 'ArrayRef[Str]',
+    required => 1,
+    traits => [ 'Array' ],
+    handles => {
+      player_count => 'count',
+    }
+  );
+
+  has players => (
+    is => 'ro',
+    isa => 'ArrayRef[RemigioPlayer]',
+    traits => [ 'Array' ],
+    handles => {
+      player => 'get',
+    }
+  );
+  has invisible_pile => (
+    is => 'ro',
+    isa => 'CardStash',
+  );
+  has visible_pile => (
+    is => 'ro',
+    isa => 'CardStash',
+  );
 
   no Moose;
   __PACKAGE__->meta->make_immutable;
